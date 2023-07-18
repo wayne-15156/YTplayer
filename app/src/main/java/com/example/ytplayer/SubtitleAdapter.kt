@@ -7,7 +7,15 @@ import android.view.ViewGroup
 import android.widget.TextView
 import androidx.recyclerview.widget.RecyclerView
 
-class SubtitleAdapter(context: Context): RecyclerView.Adapter<SubtitleAdapter.ViewHolder>() {
+class SubtitleAdapter(context: Context,
+                      private val subtitleObj: ArrayList<SubtitleObj.Result.VideoInfo.CaptionResult.Results.Captions>,
+                      private val listener: ClickOnListener)
+                    : RecyclerView.Adapter<SubtitleAdapter.ViewHolder>() {
+
+    interface ClickOnListener {
+        fun onClick(pos: Int)
+    }
+
     class ViewHolder(v: View): RecyclerView.ViewHolder(v) {
         val tvText = v.findViewById<TextView>(R.id.tv_text)
         val tvPos = v.findViewById<TextView>(R.id.tv_pos)
@@ -21,10 +29,16 @@ class SubtitleAdapter(context: Context): RecyclerView.Adapter<SubtitleAdapter.Vi
     }
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        TODO("Not yet implemented")
+        holder.tvText.text = subtitleObj[position].content
+        holder.tvPos.text = "${position + 1}"
+
+        holder.tvText.rootView.setOnClickListener {
+            listener.onClick(position)
+        }
+
     }
 
     override fun getItemCount(): Int {
-        TODO("Not yet implemented")
+        return  subtitleObj.size
     }
 }
