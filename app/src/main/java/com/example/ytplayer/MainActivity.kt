@@ -1,5 +1,6 @@
 package com.example.ytplayer
 
+import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.Bundle
 import android.util.DisplayMetrics
@@ -7,8 +8,10 @@ import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebSettings
 import android.webkit.WebViewClient
+import android.widget.Button
 import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.example.ytplayer.databinding.ActivityMainBinding
 import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
@@ -32,15 +35,12 @@ import java.util.Date
 class MainActivity : AppCompatActivity() {
 
     var binding: ActivityMainBinding? = null
+    val subtitleObj = ArrayList<SubtitleObj.Result.VideoInfo.CaptionResult.Results.Captions>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding?.root)
-
-        binding?.recyclerView?.post {
-            (binding?.recyclerView?.layoutManager as LinearLayoutManager).scrollToPosition()
-        }
 
 //        val displayMetrics = DisplayMetrics()
 //        windowManager.defaultDisplay.getMetrics(displayMetrics)
@@ -93,11 +93,9 @@ class MainActivity : AppCompatActivity() {
                   // 5. The API calls this function when the player's state changes.
                   //    The function indicates that when playing a video (state=1),
                   //    the player should play for six seconds and then stop.
-                  var done = false;
+                  
                   function onPlayerStateChange(event) {             
-           
                       window.JSInterface.KTGetVideoStatus(player.getPlayerState())     
-                                     
                   }
                   
                   function JSGetCurTime() {
@@ -128,25 +126,65 @@ class MainActivity : AppCompatActivity() {
         binding?.webView?.loadData(iframeHtml, "text/html", "utf-8")
 
         binding?.btnPlay?.setOnClickListener {
+            if (JSInterface.curStatus == 1 || JSInterface.curStatus == 3)
+                binding?.webView?.loadUrl("javascript:player.pauseVideo()")
+            else if (JSInterface.curStatus == 0 || JSInterface.curStatus == 2)
+                binding?.webView?.loadUrl("javascript:player.playVideo()")
+
 
             //binding?.webView?.loadUrl("javascript:callAndroid()")
             //binding?.webView?.loadUrl("javascript:player.cueVideoById(9nhhQhAxhjo, 10)")
             //binding?.webView?.loadUrl("javascript:player.loadVideoById(\"9nhhQhAxhjo\", 10)")
-
-
             //binding?.webView?.loadUrl("javascript:player.mute().playVideo().pauseVideo().unMute().playVideo()")
-            Log.e("123", "Time: ${Date().time}")
 
         }
 
-        //定時確認影片時間
-        CoroutineScope(Dispatchers.Main).launch {
-            while (true) {
-                binding?.webView?.loadUrl("javascript:JSGetCurTime()")
-                delay(100)
+        binding?.recyclerView?.post {
+            //定時確認影片時間
+            CoroutineScope(Dispatchers.Main).launch {
+                var curPos = -1
+                var prePos = -1
+
+                while (true) {
+                    //監聽播放狀態
+                    if (JSInterface.curStatus == -1 || JSInterface.curStatus == 0 || JSInterface.curStatus == 2)
+                        binding?.btnPlay?.background = resources.getDrawable(R.drawable.play_icon, null)
+                    else
+                        binding?.btnPlay?.background = resources.getDrawable(R.drawable.pause_icon, null)
+
+                    binding?.webView?.loadUrl("javascript:JSGetCurTime()")
+                    curPos = findPos(JSInterface.curTime)
+                    //顯示灰色項目變動
+                    if (curPos != -1) {
+                        (binding?.recyclerView?.layoutManager as LinearLayoutManager).findViewByPosition(curPos)
+                                ?.setBackgroundColor((0xFFE0E0E0).toInt())
+                        if (prePos != curPos) {
+                            (binding?.recyclerView?.layoutManager as LinearLayoutManager).scrollToPosition(curPos)
+                            //(binding?.recyclerView?.layoutManager as LinearLayoutManager).scrollToPositionWithOffset(curPos, 0)
+
+                            if (prePos != -1)
+                                (binding?.recyclerView?.layoutManager as LinearLayoutManager).findViewByPosition(prePos)
+                                    ?.setBackgroundColor((0xFFFFFFFF).toInt())
+                        }
+                        prePos = curPos
+                    }
+                    delay(100)
+                }
             }
         }
 
+    }
+
+    private fun findPos(t: Double): Int {
+        val size = subtitleObj.size
+        subtitleObj.forEachIndexed { idx, obj ->
+            if (idx == size - 1) //最後一個idx判斷獨立處理
+                if (t >= obj.miniSecond) return idx else idx-1
+
+            if (t < obj.miniSecond)
+                return idx - 1
+        }
+        return -1 //錯誤, 找不到位置
     }
 
     private fun getSubtitle() {
@@ -175,17 +213,11 @@ class MainActivity : AppCompatActivity() {
             override fun onResponse(call: Call, response: Response) {
                 val res = response.body?.string()
                 val resObj = Gson().fromJson(res, SubtitleObj::class.java)
-                val subtitleObj = ArrayList<SubtitleObj.Result.VideoInfo.CaptionResult.Results.Captions>()
+
                 subtitleObj.clear()
                 subtitleObj.addAll(resObj.result.videoInfo.captionResult.results[0].captions)
 
-                subtitleObj.forEach {
-                    it.startTime = it.miniSecond + (it.time.toDouble())/1000
-                    Log.e("123", "startTime: ${it.startTime}")
-                }
-
                 runOnUiThread {
-
                     binding?.recyclerView?.adapter = SubtitleAdapter(this@MainActivity, subtitleObj,
                         object: SubtitleAdapter.ClickOnListener {
                             override fun onClick(pos: Int) {
@@ -194,9 +226,25 @@ class MainActivity : AppCompatActivity() {
                                 //val milisec = subtitleObj[pos].time
                                 //val time = sec + milisec/1000
                                 binding?.webView?.loadUrl("javascript:player.seekTo(${subtitleObj[pos].miniSecond}, true)")
-                                Log.e("123", "${subtitleObj[pos].miniSecond}")
-                            }
+                          }
                         })
+
+                    /*
+                    RecyclerView滾動監聽事件
+                    val listener = object: RecyclerView.OnScrollListener() {
+                        override fun onScrollStateChanged(
+                            recyclerView: RecyclerView,
+                            newState: Int
+                        ) {
+                            super.onScrollStateChanged(recyclerView, newState)
+                            if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
+                                binding?.webView?.loadUrl("javascript:player.pauseVideo()")
+                                binding?.btnPlay?.background = resources.getDrawable(R.drawable.play_icon, null)
+                            }
+                        }
+                    }
+                    binding?.recyclerView?.addOnScrollListener(listener)
+                    */
                 }
             }
         })

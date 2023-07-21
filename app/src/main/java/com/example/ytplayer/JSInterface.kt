@@ -13,11 +13,6 @@ class JSInterface(context: Context, private var mWebView: WebView?) {
     }
 
     @JavascriptInterface
-    fun jsCallAndroid() {
-        Log.e("123", "js has called Android!")
-    }
-
-    @JavascriptInterface
     fun KTGetVideoStatus(status: Int) {
         curStatus = status
         Log.e("123", "Current Status: $curStatus")
@@ -32,9 +27,6 @@ class JSInterface(context: Context, private var mWebView: WebView?) {
     @JavascriptInterface
     fun KTGetVideoTime(time: Double){
         curTime = (time*1000).toInt()/1000.toDouble()
-        Log.e("123", "VideoTime: ${curTime}")
     }
-
-
 
 }
